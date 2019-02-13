@@ -192,6 +192,9 @@
             // Provided by the .env file.
             const SECRET_CLIENT_ID = '<%= secret_client_id %>';
             let ws;
+            
+            const host = location.origin.replace(/^http/, 'ws')
+            
             async function authenticate() {
                 let token = localStorage.getItem('token');
                 if (token) {
@@ -240,7 +243,7 @@
                 let movieTitle = document.getElementById('movieTitle').value;
 
                 stop(); // Stop existing eventsource.
-                ws = new WebSocket(`ws://localhost:3000/?token=${token}`);
+                ws = new WebSocket(`${host}/?token=${token}`);
                 ws.onopen = function() {
                     // Web Socket is connected, send data using send()
                     ws.send(`{"type": "movies", "title": "${movieTitle}"}`);
@@ -272,7 +275,7 @@
                 let isAnime = document.getElementById('isAnime').checked;
 
                 stop(); // Stop existing eventsource.
-                ws = new WebSocket(`ws://localhost:3000/?token=${token}`);
+                ws = new WebSocket(`${host}/?token=${token}`);
                 ws.onopen = function() {
                     // Web Socket is connected, send data using send()
                     ws.send(JSON.stringify(
