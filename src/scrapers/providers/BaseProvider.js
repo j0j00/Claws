@@ -19,7 +19,7 @@ function _implementMe(functionName) {
 const BaseProvider = class BaseProvider {
     constructor(queue) {
         this.logger = logger;
-        this.userAgent = randomUseragent.getRandom();        
+        this.userAgent = randomUseragent.getRandom();
         this.queue = queue;
         if (new.target === BaseProvider) {
             throw new TypeError("Cannot construct BaseProvider instances directly");
@@ -148,23 +148,28 @@ const BaseProvider = class BaseProvider {
             ...extraOptions,
         };
 
-        return new Promise((resolve, reject) => {
-            // name = name || 'Default_Name';
-            var job = this.queue.create('request', {
-                rp: rp(options)
-            }).attempts(3).backoff(true).removeOnComplete(true);
+        if (process.env['CLAWS_KUE']) {
+            return new Promise((resolve, reject) => {
+                // name = name || 'Default_Name';
+                const job = this.queue.create('request', {
+                    rp: rp(options)
+                }).attempts(3).backoff(true).removeOnComplete(true);
 
-            job
-                .on('complete', function (result) {
-                    console.log('Job', job.id, 'is  done');
-                    resolve(result);
-                })
-                .on('failed', function () {
-                    console.log('Job', job.id, 'with name', job.data.name, 'has  failed');
-                    reject(job.data);
-                });
-            job.save();
-        });
+                job
+                    .on('complete', function (result) {
+                        console.log('Job', job.id, 'is  done');
+                        resolve(result);
+                    })
+                    .on('failed', function () {
+                        console.log('Job', job.id, 'with name', job.data.name, 'has  failed');
+                        reject(job.data);
+                    });
+                job.save();
+            });
+        }
+
+        // Don't use kue.
+        return rp(options);
     }
 
     /**

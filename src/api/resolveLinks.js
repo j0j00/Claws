@@ -3,7 +3,6 @@
 // Load providers
 const {providers, queue} = require('../scrapers/providers');
 const RequestPromise = require('request-promise');
-var events = require('kue/lib/queue/events');
 
 const BaseProvider = require('../scrapers/providers/BaseProvider');
 const logger = require('../utils/logger');
@@ -47,20 +46,27 @@ const resolveLinks = async (data, ws, req) => {
 
     availableProviders.forEach((provider) => promises.push(provider.resolveRequests(req, wsWrapper)));
 
-    queue.process('request', async function (job, done) {
-        try {
-            const data = await RequestPromise(job.data.rp)
-            done(null, data)
-        } catch (err) {
-            console.log(err)
-            done(err, null)
-        }
-
-    })
+    if (queue) {
+        // Process queue if it's supported.
+        queue.process('request', async function (job, done) {
+            try {
+                const data = await RequestPromise(job.data.rp);
+                done(null, data)
+            } catch (err) {
+                console.log(err);
+                done(err, null)
+            }
+        });
+    }
 
     await Promise.all(promises);
-    logger.debug('Scraping complete: sending `Done` event')
-    ws.send(JSON.stringify({event: 'done'}));
+
+    if (ws.isAlive) {
+        logger.debug('Scraping complete: sending `Done` event');
+        ws.send(JSON.stringify({event: 'done'}));
+    } else {
+        logger.debug('Scraping complete: `Done` event ready, but websocket is dead.');
+    }
 };
 
 module.exports = resolveLinks;
