@@ -2,7 +2,8 @@
   "name": "claws",
   "version": "0.0.1",
   "scripts": {
-    "start": "pm2-runtime ecosystem.config.js",
+    "start": "npm run build-dev-dependencies && node server.js",
+    "start:prod": "pm2-runtime ecosystem.config.js",
     "pm2-docker-dev": "npm run build-dev-dependencies && pm2-runtime ecosystem.config.js --env development",
     "pm2-local-prod": "pm2 start ./ecosystem.config.js",
     "pm2-local-dev": "npm run build-dev-dependencies && pm2 start ./ecosystem.config.js --env development",

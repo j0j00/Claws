@@ -226,6 +226,8 @@
             let ws;
             let results = [];
 
+            const host = location.origin.replace(/^http/, 'ws');
+
             document.getElementById('searchText').onkeydown = searchByEnter;
 
             async function authenticate() {
@@ -274,7 +276,7 @@
             async function scrapeMovies(searchData) {
                 let token = await authenticate();
                 stop(); // Stop existing websocket.
-                ws = new WebSocket(`ws://localhost:3000/?token=${token}`);
+                ws = new WebSocket(`${host}/?token=${token}`);
                 ws.onopen = function() {
                     // Web Socket is connected, send data using send()
                     ws.send(JSON.stringify({type: 'movies', title: searchData.title, year: (new Date(searchData.release_date)).getFullYear()}));
@@ -303,7 +305,7 @@
             async function scrapeTV(searchData) {
                 let token = await authenticate();
                 stop(); // Stop existing websocket.
-                ws = new WebSocket(`ws://localhost:3000/?token=${token}`);
+                ws = new WebSocket(`${host}/?token=${token}`);
                 let isAnime = document.getElementById('isAnime').checked;
                 ws.onopen = function() {
                     // Web Socket is connected, send data using send()

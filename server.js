@@ -12,10 +12,15 @@ const pathToApp = __dirname;
 // Initialize express
 let app = express();
 
-// Add renderer.
-app.engine('html', require('ejs').__express);
-app.set('views', 'public'); // render from the public directory.
-app.set('view engine', 'html');
+let redirectToLive = process.env.NODE_ENV === 'production' && typeof process.env.SHOW_DEV_UI === 'undefined';
+
+if (!redirectToLive) {
+    // Only apply the templating engine renderer if we're using it.
+
+    app.engine('html', require('ejs').__express);
+    app.set('views', 'public'); // render from the public directory.
+    app.set('view engine', 'html');
+}
 
 // Load external ExpressJS middleware
 const compression = require('compression');
@@ -44,7 +49,7 @@ app.use(function (req, res, next) {
 
 /** RENDERED ROUTES **/
 app.get('/', function(req, res) {
-    if (process.env.NODE_ENV === 'production') {
+    if (redirectToLive) {
         // When in production, redirect to the main site.
         res.redirect("https://apollotv.xyz/");
     } else {
