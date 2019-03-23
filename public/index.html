@@ -346,6 +346,8 @@
                 alert("Connection is closed...");
             };
         }
+        let season, episode;
+
         async function scrapeTV(searchData) {
             let token = await authenticate();
             stop(); // Stop existing websocket.
@@ -353,8 +355,8 @@
             let isAnime = document.getElementById('isAnime').checked;
             ws.onopen = function () {
                 // Web Socket is connected, send data using send()
-                const season = Number(window.prompt('Type a number for the season', ''));
-                const episode = Number(window.prompt('Type a number for the episode', ''));
+                season = Number(window.prompt('Type a number for the season', season));
+                episode = Number(window.prompt('Type a number for the episode', episode));
                 debugData = { ...searchData, season, episode };
                 if (season && episode) {
                     ws.send(JSON.stringify({ type: isAnime ? 'anime' : 'tv', title: searchData.name, year: (new Date(searchData.first_air_date)).getFullYear(), season, episode }));
