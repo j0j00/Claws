@@ -7,18 +7,20 @@ module.exports = exports = {
         new (require('./movies/bfmovies'))(),
         new (require('./movies/StreamM4u'))(),
         //require('./movies/MovieFiles'),
+        new (require('./movies/DLFilm'))()
     ],
     tv: [
         new (require('./tv/SeriesFree'))(),
         new (require('./tv/GoWatchSeries'))(),
         new (require('./tv/SwatchSeries'))(),
         //require('./tv/AfdahTV'),
-        new (require('./tv/Series8'))()
     ],
     anime: [],
     universal: [
         new (require('./universal/123movie'))(),
-        new (require('./universal/ODB'))()
+        new (require('./universal/ODB'))(),
+        new (require('./universal/Series8'))(),
         //require('./universal/5movies')
+        new (require('./universal/FardaDownload'))()
     ]
 };
