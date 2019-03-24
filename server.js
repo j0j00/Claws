@@ -12,7 +12,7 @@ const pathToApp = __dirname;
 // Initialize express
 let app = express();
 
-let redirectToLive = process.env.NODE_ENV === 'production' && typeof process.env.SHOW_DEV_UI === 'undefined';
+let redirectToLive = process.env.NODE_ENV === 'production' && process.env.SHOW_DEV_UI !== 'true';
 
 if (!redirectToLive) {
     // Only apply the templating engine renderer if we're using it.
