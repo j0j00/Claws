@@ -5,11 +5,11 @@ const apps = [];
 const apolloTvServer = {
     name: 'ApolloTV Server',
     script: 'server.js',
-    instances: 'max',
+    instances: process.env['PM_INSTANCES'] || 'max',
     exec_mode: 'cluster',
     autorestart: true,
     watch: false,
-    max_memory_restart: '7G',
+    max_memory_restart: process.env['PM_MAX_MEMORY_RESTART'] || '7G',
     env: {
         NODE_ENV: 'production'
     },
@@ -35,7 +35,7 @@ if (process.env.RATE_LIMITER === 'true') {
         instances: 1,
         autorestart: true,
         watch: false,
-        max_memory_restart: '200M',
+        max_memory_restart: process.env['PM_RL_MAX_MEMORY_RESTART'] || '200M',
         env: {
             NODE_ENV: 'production'
         },

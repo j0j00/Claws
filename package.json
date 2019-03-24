@@ -2,8 +2,7 @@
   "name": "claws",
   "version": "0.0.1",
   "scripts": {
-    "start": "npm run build-dev-dependencies && node server.js",
-    "start:prod": "pm2-runtime ecosystem.config.js",
+    "start": "npm run build-dev-dependencies && pm2-runtime ecosystem.config.js",
     "pm2-docker-dev": "npm run build-dev-dependencies && pm2-runtime ecosystem.config.js --env development",
     "pm2-local-prod": "pm2 start ./ecosystem.config.js",
     "pm2-local-dev": "npm run build-dev-dependencies && pm2 start ./ecosystem.config.js --env development",
@@ -48,7 +47,7 @@
     "cross-env": "^5.2.0",
     "mocha": "^5.2.0",
     "nodemon": "^1.14.4",
-    "pm2": "^3.2.9"
+    "pm2": "^3.4.0"
   },
   "eslintConfig": {
     "root": true,
