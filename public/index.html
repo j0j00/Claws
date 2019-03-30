@@ -186,6 +186,21 @@
                 display: flex;
                 align-items: flex-end;
                 cursor: pointer;
+                position: relative;
+            }
+
+            .search-result.no-image {
+                background-color: #696969; /* tee hee*/
+            }
+
+            .search-result.no-image:before {
+                content: "NO IMAGE";
+                position: absolute;
+                top: 77px;
+                font-weight: bold;
+                width: 100%;
+                text-align: center;
+                color: #c7c5c5;
             }
 
             .search-result > .search-result-title-container {
@@ -276,10 +291,12 @@
             async function scrapeMovies(searchData) {
                 let token = await authenticate();
                 stop(); // Stop existing websocket.
+                const response = await fetch(`https://api.themoviedb.org/3/movie/${searchData.id}/external_ids?api_key=${TMDB_API_KEY}`);
+                const responseJSON = await response.json();
                 ws = new WebSocket(`${host}/?token=${token}`);
                 ws.onopen = function() {
                     // Web Socket is connected, send data using send()
-                    ws.send(JSON.stringify({type: 'movies', title: searchData.title, year: (new Date(searchData.release_date)).getFullYear()}));
+                    ws.send(JSON.stringify({type: 'movies', title: searchData.title, year: (new Date(searchData.release_date)).getFullYear(), tmdbId: searchData.id, imdbId: responseJSON.imdb_id}));
                     document.getElementById('stop').disabled = false;
                 };
 
@@ -305,6 +322,8 @@
             async function scrapeTV(searchData) {
                 let token = await authenticate();
                 stop(); // Stop existing websocket.
+                const response = await fetch(`https://api.themoviedb.org/3/tv/${searchData.id}/external_ids?api_key=${TMDB_API_KEY}`);
+                const responseJSON = await response.json();
                 ws = new WebSocket(`${host}/?token=${token}`);
                 let isAnime = document.getElementById('isAnime').checked;
                 ws.onopen = function() {
@@ -312,7 +331,7 @@
                     const season = Number(window.prompt('Type a number for the season', ''));
                     const episode = Number(window.prompt('Type a number for the episode', ''));
                     if (season && episode) {
-                        ws.send(JSON.stringify({type: isAnime ? 'anime' : 'tv', title: searchData.name, year: (new Date(searchData.first_air_date)).getFullYear(), season, episode}));
+                        ws.send(JSON.stringify({type: isAnime ? 'anime' : 'tv', title: searchData.name, year: (new Date(searchData.first_air_date)).getFullYear(), season, episode, tmdbId: searchData.id, imdbId: responseJSON.imdb_id}));
                         document.getElementById('stop').disabled = false;
                     } else {
                         stop();
@@ -354,8 +373,12 @@
                 results = responseJSON.results;
                 for(let result of results) {
                     const resultContainer = document.createElement('div');
-                    resultContainer.style.background = `url('https://image.tmdb.org/t/p/w200${result.poster_path}') center / cover`;
                     resultContainer.classList.add('search-result');
+                    if (result.poster_path) {
+                        resultContainer.style.background = `url('https://image.tmdb.org/t/p/w200${result.poster_path}') center / cover`;
+                    } else {
+                        resultContainer.classList.add('no-image');
+                    }
                     const titleContainer = document.createElement('div');
                     titleContainer.classList.add('search-result-title-container');
                     const title = document.createElement('span');

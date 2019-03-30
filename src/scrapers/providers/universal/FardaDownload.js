@@ -4,7 +4,7 @@ const BaseProvider = require('../BaseProvider');
 module.exports = class FardaDownload extends BaseProvider {
     /** @inheritdoc */
     getUrls() {
-        return ['https://fardadownload.org'];
+        return ['https://fardadownload.org', 'https://1fardadl.com'];
     }
 
     /** @inheritdoc */
@@ -18,8 +18,8 @@ module.exports = class FardaDownload extends BaseProvider {
         let headers = {};
 
         try {
-            const searchTitle = `${title} ${year}`;
-            let searchUrl = (`${url}/?s=${searchTitle.replace(/ /g, '%20')}`);
+            let searchTitle = `${title} ${year}`;
+            let searchUrl = this._generateUrl(url, {s: searchTitle});
             const rp = this._getRequest(req, ws);
             const jar = rp.jar();
             const response = await this._createRequest(rp, searchUrl, jar, headers);
@@ -28,15 +28,14 @@ module.exports = class FardaDownload extends BaseProvider {
 
             let videoPage = '';
             $('.post-title a').toArray().forEach(element => {
-
-                let contentTitle = $(element).find('h2').text().toLowerCase();
+                // Replace is used because Farda uses a different apostrophe character...
+                let contentTitle = $(element).find('h2').text().toLowerCase().replace('’', '\'');
                 let contentPage = $(element).attr('href');
 
                 if (contentTitle.includes(searchTitle)) {
                     videoPage = contentPage;
                 }
             });
-
             if (!videoPage) {
                 return Promise.resolve();
             }

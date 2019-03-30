@@ -13,6 +13,7 @@ module.exports = exports = {
         new (require('./tv/SeriesFree'))(),
         new (require('./tv/GoWatchSeries'))(),
         new (require('./tv/SwatchSeries'))(),
+        new (require('./tv/ProjectFreeTV'))()
         //require('./tv/AfdahTV'),
     ],
     anime: [],
