@@ -1,4 +1,5 @@
 const cheerio = require('cheerio');
+const vm = require('vm');
 const randomUseragent = require('random-useragent');
 const BaseProvider = require('../BaseProvider');
 
@@ -51,6 +52,8 @@ module.exports = class Afdah extends BaseProvider {
 
             const regexMatches = /(?:var frame_url = ")(.*)(?:")/g.exec(videoPageHtml);
 
+            // TODO: I don't think all this logic should be in the provider?
+            // It should be relatively simple and send the link and all the required resolver meta data.
             if (regexMatches) {
                 const userAgent = randomUseragent.getRandom();
 
@@ -141,14 +144,38 @@ module.exports = class Afdah extends BaseProvider {
                     }
                 );
 
-            const providerUrl = `https://oload.cloud/embed/${openloadData.id}`;
+                if (openloadData) {
+                    let providerUrl;
 
-            resolvePromises.push(this.resolveLink(providerUrl, ws, jar, headers));
-        }
+                    if (openloadData.id) {
+                        providerUrl = `https://oload.cloud/embed/${openloadData.id}`;
+                    } else {
+                        let jwPlayerConfig;
+                        let jQuery = this._getJqueryShim($);
+                        const sandbox = this._getDefaultSandbox(jQuery, this._getJwPlayerShim((config) => {
+                            jwPlayerConfig = config;
+                        }));
+                        sandbox['config'] = {};
+                        let dynamicVariable = this._createNativeProxyShim('ser1', true);
+                        sandbox['ser1'] = sandbox['ser2'] = sandbox['showSer1'] = sandbox['showSer2'] = dynamicVariable;
+
+                        vm.createContext(sandbox); // Contextify the sandbox.
+                        vm.runInContext(openloadData, sandbox);
+
+                        if (jwPlayerConfig.file) {
+                            providerUrl = this._absoluteUrl(videoStreamUrl, jwPlayerConfig.file);
+                        }
+                    }
+
+                    if (providerUrl) {
+                        resolvePromises.push(this.resolveLink(providerUrl, ws, jar, headers));
+                    }
+                }
+            }
         }
     catch(err) {
         this._onErrorOccurred(err)
     }
         return Promise.all(resolvePromises)
     }
-}
+};

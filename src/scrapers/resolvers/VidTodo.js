@@ -19,13 +19,17 @@ async function VidTodo(uri, jar, {'user-agent': userAgent}) {
             });
         } catch (err) {
             await timeout(3000);
-            attempt++;
         }
+        attempt++;
     }
-    const videoSourcesString = /(?:sources:\s)(\[.*\])/g.exec(videoSourceHtml)[1];
-    const sandbox = {};
-    vm.createContext(sandbox); // Contextify the sandbox.
-    return vm.runInContext(videoSourcesString, sandbox);
+    let sources = /(?:sources:\s)(\[.*\])/g.exec(videoSourceHtml);
+    if (sources) {
+        const videoSourcesString = sources[1];
+        const sandbox = {};
+        vm.createContext(sandbox); // Contextify the sandbox.
+        return vm.runInContext(videoSourcesString, sandbox);
+    }
+    return [];
 }
 
 module.exports = exports = VidTodo;

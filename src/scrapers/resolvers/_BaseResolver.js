@@ -1,4 +1,7 @@
 const createEvent = require('../../utils/createEvent');
+const logger = require('../../utils/logger');
+const JavascriptEval = require('../../utils/javascriptEval');
+const useragent = require('../../utils/useragent');
 const rp = require('request-promise');
 
 function _implementMe(functionName) {
@@ -70,6 +73,14 @@ const BaseResolver = class BaseResolver {
     }
 
     /**
+     * Return the user agent to use for requests.
+     * @return String
+     */
+    getDefaultUserAgent() {
+        return useragent.getUserAgent();
+    }
+
+    /**
      * Resolve a URI.
      * @param {Object} meta The meta data for resolving requests.
      * @param {Object} meta.ws server-side emitter/websocket agent.
@@ -85,8 +96,15 @@ const BaseResolver = class BaseResolver {
         if (this.hasIpLocking() && this.scrapeFromClientResponse()) {
             return this.createScrapeEvent(uri, meta);
         }
-        const responseHtml = await this.createRequest(this.normalizeUri(uri), jar, headers);
-        return this.resolveHtml(meta, responseHtml, jar, headers);
+        try {
+            const responseHtml = await this.createRequest(this.normalizeUri(uri), jar, headers, {
+                clawsOriginalUri: uri,
+            });
+            return this.resolveHtml(meta, responseHtml, jar, headers);
+        } catch (e) {
+            this._onErrorOccurred(e);
+            return null;
+        }
     }
 
     /**
@@ -110,16 +128,20 @@ const BaseResolver = class BaseResolver {
      * @param uri
      * @param jar
      * @param headers
+     * @param extraOptions
      *
      * @return Promise
      */
-    createRequest(uri, jar, headers) {
+    createRequest(uri, jar, headers, extraOptions = {}) {
+        headers = this._preprocessRequest(uri, jar, headers, extraOptions);
+
         return rp({
             uri,
             headers,
             jar,
             followAllRedirects: true,
-            timeout: 5000
+            timeout: 5000,
+            ...extraOptions,
         });
     }
 
@@ -151,7 +173,11 @@ const BaseResolver = class BaseResolver {
             // Returning links directly from HTMl.
             const dataList = [];
             links.forEach(dataObject => {
-                dataList.push(this.createEvent(dataObject.data, false, {}, {quality: dataObject.meta.quality || metaData.quality}));
+                let quality = metaData.quality;
+                if (dataObject.meta && dataObject.meta.quality) {
+                    quality = dataObject.meta.quality;
+                }
+                dataList.push(this.createEvent(dataObject.data, false, {}, {quality: quality}));
             });
             return dataList;
         }
@@ -195,6 +221,28 @@ const BaseResolver = class BaseResolver {
         return process.env.CLAWS_ENV === 'server';
     }
 
+    _preprocessRequest(uri, jar, headers) {
+        if (!headers) {
+            headers = {};
+        }
+        if (!headers['user-agent'] || !headers['User-Agent']) {
+            headers['user-agent'] = this.getDefaultUserAgent();
+        }
+
+        return headers;
+    }
+
+    _onErrorOccurred(e) {
+        if (e.name === 'StatusCodeError') {
+            e = {
+                name: e.name,
+                statusCode: e.statusCode,
+                options: e.options,
+            }
+        }
+        logger.error(`${this.getResolverId()}: An unexpected error occurred:`, e);
+    }
+
     /**
      *
      * @param {Object} $ Cheerio object.
@@ -202,26 +250,7 @@ const BaseResolver = class BaseResolver {
      * @return {Function}
      */
     _getJqueryShim($, processFn = null) {
-        return function (selector, anotherArg) {
-
-            let jQuery = function () {
-                return jQuery;
-            };
-
-            jQuery.ready = jQuery.click = jQuery.hide = jQuery.show = jQuery.mouseup = jQuery.mousedown =
-                jQuery.hasClass = jQuery.attr = jQuery.post = jQuery.get = jQuery.append = jQuery;
-
-            jQuery.cookie = function () {
-                return true;
-            };
-
-            if (processFn) {
-                // Allow sub-classes to modify the returned jQuery object.
-                processFn(jQuery, $, arguments);
-            }
-
-            return jQuery
-        };
+        return JavascriptEval._getJqueryShim($, processFn);
     }
 
     /**
@@ -229,86 +258,15 @@ const BaseResolver = class BaseResolver {
      * @param {Function} setupCallback
      */
     _getJwPlayerShim(setupCallback) {
-        let jwplayer = function () {
-            return jwplayer;
-        };
-        jwplayer.on = jwplayer.addButton = jwplayer.onTime = jwplayer.onComplete = jwplayer;
-
-        jwplayer.setup = setupCallback;
-
-        return jwplayer;
+        return JavascriptEval._getJwPlayerShim(setupCallback);
     }
 
     _getClapprShims(playerCallback) {
-        let noop = function () {
-            return noop;
-        };
-        let player = function (config) {
-            playerCallback && playerCallback(config, 'constructor');
-            return {
-                options: config,
-                attachTo: noop,
-                listenTo: noop,
-                configure: noop,
-                play: noop,
-                load: (options) => {
-                    playerCallback && playerCallback(options, 'load');
-                },
-            }
-        };
-        let events = function () {
-            return {
-                PLAYER_FULLSCREEN: 'fullscreen',
-                on: events,
-                once: events,
-                off: events,
-                trigger: events,
-                stopListening: events,
-            }
-        };
-        let Clappr = {
-            Player: player,
-            Events: events,
-        };
-        Clappr.$ = function () {
-            return {text: noop};
-        };
-
-        // List of properties which should be merged into the context object.
-        return {
-            Clappr: Clappr,
-            LevelSelector: {},
-            TheaterMode: {},
-        };
+        return JavascriptEval._getClapprShims(playerCallback);
     }
 
     _getDefaultSandbox(jQuery, jwPlayer, clapper, includeBrowserShims) {
-        let sandbox = {
-            $: jQuery,
-            jQuery: jQuery,
-            jwplayer: jwPlayer,
-            sin: Math.sin,
-            navigator: {
-                userAgent: ''
-            },
-            atob: function (encodedData) {
-                return Buffer.from(encodedData, 'base64').toString();
-            },
-            btoa: function (stringToEncode) {
-                return Buffer.from(stringToEncode).toString('base64');
-            },
-            ...clapper,
-        };
-
-        if (includeBrowserShims) {
-            let Document = this._createNativeProxyShim('Document', false);
-
-            sandbox['Document'] = Document;
-            sandbox['document'] = Document;
-        }
-
-        sandbox['window'] = sandbox;
-        return sandbox;
+        return JavascriptEval._getDefaultSandbox(jQuery, jwPlayer, clapper, includeBrowserShims);
     }
 
     /**
@@ -321,53 +279,7 @@ const BaseResolver = class BaseResolver {
      * @return {Function|Proxy}
      */
     _createNativeProxyShim(propertyName, useProxy) {
-        let that = this;
-
-        let shim;
-        if (useProxy) {
-            shim = new Proxy(function () {
-                return shim;
-            }, {
-                get: function (target, name, proxy) {
-                    if (target.hasOwnProperty(name)) {
-                        return target[name];
-                    }
-
-                    if ('hasOwnProperty' === name) {
-                        return function () {
-                            return true;
-                        }
-                    } else if ('toString' === name) {
-                        return `toString: ${name}`;
-                    } else if ('length' === name) {
-                        return 0;
-                    } else if (name === '__proto__') {
-                        return proxy ? proxy : that;
-                    }
-
-                    return that._createNativeProxyShim(name, true);
-                },
-            });
-        } else {
-            shim = function () {
-            };
-        }
-
-        let objectToString = "[object " + (propertyName.charAt(0).toUpperCase() + propertyName.slice(1)) + "]";
-
-        shim.toString = function () {
-            if (useProxy || /^[A-Z]/.test(propertyName)) {
-                // Starts with a uppercase - it's a class.
-                return "function " + propertyName + "() { [native code] }";
-            }
-            return objectToString;
-        };
-        shim.__proto__.toString = shim.toString;
-        shim.prototype.toString = function () {
-            return objectToString
-        };
-
-        return shim;
+        return JavascriptEval._createNativeProxyShim(propertyName, useProxy);
     }
 
     /**
@@ -377,26 +289,7 @@ const BaseResolver = class BaseResolver {
      * @return {ClawsLink[]}
      */
     _resolveJwPlayerLinks(setupConfig, meta) {
-        let links = [];
-        if (setupConfig && setupConfig.file) {
-            links.push({
-                data: setupConfig.file,
-                meta,
-            });
-        }
-        if (setupConfig.sources) {
-            setupConfig.sources.forEach(function (source) {
-                links.push({
-                    data: source.file,
-                    meta: {
-                        ...meta,
-                        quality: source.label,
-                    },
-                });
-            });
-        }
-
-        return links;
+        return JavascriptEval._resolveJwPlayerLinks(setupConfig, meta);
     }
 };
 

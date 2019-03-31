@@ -338,11 +338,12 @@
 
             ws.onmessage = function (e) {
                 try {
-                    const data = JSON.parse(e.data)
+                    let provider, resolver;
+                    const data = JSON.parse(e.data);
                     console.log(data);
                     if (data.event === 'scrape') {
                         provider = data.provider;
-                        resolver = data.resolver
+                        resolver = data.resolver;
                         scrapes = scrapes + 1;
                     }
                     if (data.event === 'result') {
@@ -405,11 +406,12 @@
                     stop();
                 } ws.onmessage = function (e) {
                     try {
-                        const data = JSON.parse(e.data)
+                        let provider, resolver;
+                        const data = JSON.parse(e.data);
                         console.log(data);
                         if (data.event === 'scrape') {
                             provider = data.provider;
-                            resolver = data.resolver
+                            resolver = data.resolver;
                             scrapes = scrapes + 1;
                         }
                         if (data.event === 'result') {
@@ -431,7 +433,7 @@
                                 search: `${debugData.name}, S${debugData.season}E${debugData.episode}`,
                                 results: { scrape: scrapes, results: resultsCount },
                                 provider: resultCountObject
-                            })
+                            });
                             scrapes = 0;
                             resultsCount = 0;
                             console.log('Results per site (aggregated): ');

@@ -71,9 +71,12 @@ class WsWrapper {
                     timeout: 5000
                 });
 
-                resultData.file.fileSize = Number(response.headers['content-length']);
-                resultData.file.contentType = response.headers['content-type'];
-                resultData.metadata.isStreamable = response.headers['accept-ranges'] === 'bytes';
+                if (response) {
+                    // Response can be null if stopExecution is true.
+                    resultData.file.fileSize = Number(response.headers['content-length']);
+                    resultData.file.contentType = response.headers['content-type'];
+                    resultData.metadata.isStreamable = response.headers['accept-ranges'] === 'bytes';
+                }
             } catch(err) {
                 logger.error(err);
             }

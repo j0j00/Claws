@@ -49,7 +49,6 @@ describe('Mp4Upload', function () {
         expect(results.length).to.be.equal(1);
         expect(results[0].file).to.include({
             'data': 'https://s2.mp4upload.com:282/d/qox266icz3b4quuouovu6iisjmsf4s3nttf7etetswtextolhkrtqjhs/video.mp4',
-            'kind': 'video/mp4'
         });
     });
 });

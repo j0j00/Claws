@@ -17,7 +17,9 @@ module.exports.providers = {
         new (require('./tv/ProjectFreeTV'))(queue)
         //require('./tv/AfdahTV'),
     ],
-    anime: [],
+    anime: [
+        new (require('./anime/AnimePahe'))(),
+    ],
     universal: [
         new (require('./universal/123movie'))(queue),
         new (require('./universal/ODB'))(queue),

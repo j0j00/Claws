@@ -4,7 +4,8 @@ const Promise = require('bluebird');
 const RequestPromise = require('request-promise');
 const resolve = require('../resolvers/resolve');
 const logger = require('../../utils/logger');
-const randomUseragent = require('random-useragent');
+const javascriptEval = require('../../utils/javascriptEval');
+const useragent = require('../../utils/useragent');
 
 function _implementMe(functionName) {
     throw new Error(`Must implement ${functionName}()`);
@@ -19,7 +20,7 @@ function _implementMe(functionName) {
 const BaseProvider = class BaseProvider {
     constructor(queue) {
         this.logger = logger;
-        this.userAgent = randomUseragent.getRandom();
+        this.userAgent = useragent.getUserAgent();
         this.queue = queue;
         if (new.target === BaseProvider) {
             throw new TypeError("Cannot construct BaseProvider instances directly");
@@ -63,10 +64,15 @@ const BaseProvider = class BaseProvider {
      * @param jar
      * @param headers
      * @param quality
+     * @param meta
      * @return {Promise<undefined|*|void>}
      */
-    resolveLink(link, ws, jar, headers, quality = '') {
-        return resolve(ws, link, this.getProviderId(), jar, headers, quality);
+    resolveLink(link, ws, jar, headers, quality = '', meta = {}) {
+        if (process.env['CLAWS_TESTING'] === 'true' || process.env['CLAWS_DONT_RESOLVE_PROVIDERS'] === 'true') {
+            // Don't attempt to resolve links.
+            return link;
+        }
+        return resolve(ws, link, this.getProviderId(), jar, headers, quality, meta);
     }
 
     /**
@@ -149,7 +155,7 @@ const BaseProvider = class BaseProvider {
         };
         if (this.queue.isEnabled) {
             return new Promise((resolve, reject) => {
-                let job = this.queue.submit({ name: 'request', job: { request: rp(options) } })
+                let job = this.queue.submit({ name: 'request', job: { request: rp(options) } });
                 job.on('complete', function (result) {
                     resolve(result);
                 }).on('failed', function () {
@@ -203,6 +209,55 @@ const BaseProvider = class BaseProvider {
             }
         }
         this.logger.error(`${this.getProviderId()}: An unexpected error occurred:`, e);
+    }
+
+    /**
+     *
+     * @param {Object} $ Cheerio object.
+     * @param {Function} processFn Optional callback for modifying the default jQuery object.
+     * @return {Function}
+     */
+    _getJqueryShim($, processFn = null) {
+        return javascriptEval._getJqueryShim($, processFn);
+    }
+
+    /**
+     * Return a JWPlayer shim object.
+     * @param {Function} setupCallback
+     */
+    _getJwPlayerShim(setupCallback) {
+        return javascriptEval._getJwPlayerShim(setupCallback);
+    }
+
+    _getClapprShims(playerCallback) {
+        return javascriptEval._getClapprShims(playerCallback);
+    }
+
+    _getDefaultSandbox(jQuery, jwPlayer, clapper, includeBrowserShims) {
+        return javascriptEval._getDefaultSandbox(jQuery, jwPlayer, clapper, includeBrowserShims);
+    }
+
+    /**
+     * Create a native shim object e.g. Document, which allows you call any functions/properties and allow them
+     * to resolve without throwing a "Cannot read property of undefined" error.
+     * Useful for bypassing tricky resolvers like Openload which check for browser objects.
+     *
+     * @param {String} propertyName
+     * @param {Boolean} useProxy Set this if you need to shim complex objects with dynamic properties.
+     * @return {Function|Proxy}
+     */
+    _createNativeProxyShim(propertyName, useProxy) {
+        return javascriptEval._createNativeProxyShim(propertyName, useProxy);
+    }
+
+    /**
+     * Resolve jwplayer links.
+     * @param {Object} setupConfig
+     * @param {Object} meta
+     * @return {ClawsLink[]}
+     */
+    _resolveJwPlayerLinks(setupConfig, meta) {
+        return javascriptEval._resolveJwPlayerLinks(setupConfig, meta);
     }
 };
 

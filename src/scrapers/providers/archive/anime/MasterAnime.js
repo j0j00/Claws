@@ -1,4 +1,4 @@
-const BaseProvider = require('../BaseProvider');
+const BaseProvider = require('../../BaseProvider');
 const cheerio = require('cheerio');
 
 module.exports = class MasterAnime extends BaseProvider {

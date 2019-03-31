@@ -17,7 +17,6 @@ describe('TikiWiki', function () {
         expect(results.length).to.be.equal(1);
         expect(results[0].file).to.include({
             'data': 'https://saber.tiwicdn.net/hlrzohqpqks7nz6enz5eelwdba3wkw4rcp4jv3zn52ma3a3xcf2erhbcveva/v.mp4',
-            'kind': 'video/mp4'
         });
     });
 });

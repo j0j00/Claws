@@ -27,6 +27,11 @@ const logger = require('../../utils/logger');
 const Mp4Upload = require('./Mp4Upload');
 const StreamLewd = require('./StreamLewd');
 const TikiWiki = require('./TikiWiki');
+const FlashX = require('./FlashX');
+const KwikCx = require('./KwikCx');
+const StreamMoe = require('./StreamMoe');
+const VidStreaming = require('./VidStreaming');
+const XStreamCDN = require('./XStreamCDN');
 
 const createEvent = require('../../utils/createEvent');
 
@@ -34,10 +39,15 @@ const createEvent = require('../../utils/createEvent');
 const resolvers = [
     new Mp4Upload(),
     new StreamLewd(),
+    new VidStreaming(),
     new TikiWiki(),
+    new XStreamCDN(),
+    new KwikCx(),
+    new StreamMoe(),
+    new FlashX(),
 ];
 
-async function resolve(ws, uri, provider, jar, headers, quality = '') {
+async function resolve(ws, uri, provider, jar, headers, quality = '', meta = {}) {
     if (ws.stopExecution) {
         logger.debug('Skip resolve due to disconnect');
         return;
@@ -56,7 +66,8 @@ async function resolve(ws, uri, provider, jar, headers, quality = '') {
                 return await resolver.resolveUri({
                     ws,
                     provider,
-                    quality
+                    quality,
+                    ...meta
                 }, uri, jar, headers);
             }
         }
