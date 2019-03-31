@@ -29,6 +29,7 @@
     "ffprobe-static": "^3.0.0",
     "js-salsa20": "^1.0.0",
     "jsonwebtoken": "^8.4.0",
+    "kue": "^0.11.6",
     "m3u8-stream-list": "^1.1.0",
     "memorystore": "^1.6.0",
     "morgan": "^1.9.1",
