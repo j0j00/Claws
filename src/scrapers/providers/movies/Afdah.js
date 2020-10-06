@@ -1,192 +1,181 @@
-const Promise = require('bluebird');
-const RequestPromise = require('request-promise');
 const cheerio = require('cheerio');
+const vm = require('vm');
 const randomUseragent = require('random-useragent');
-const logger = require('../../../utils/logger');
+const BaseProvider = require('../BaseProvider');
 
-const resolve = require('../../resolvers/resolve');
+module.exports = class Afdah extends BaseProvider {
+    /** @inheritdoc */
+    getUrls() {
+        return ['https://afdah.org', 'https://genvideos.com', 'https://genvideos.co', 'https://watch32hd.co', 'https://putlockerhd.co'/* , 'https://xmovies8.org' */];
+    }
 
-async function Afdah(req, sse) {
-    const showTitle = req.query.title;
-
-    // These are all the same host I think. https://xmovies8.org isn't loading.
-    const urls = ["https://afdah.org", "https://genvideos.com", "https://genvideos.co", "https://watch32hd.co", "https://putlockerhd.co"/* , "https://xmovies8.org" */];
-    const promises = [];
-
-    const rp = RequestPromise.defaults(target => {
-        if (sse.stopExecution) {
-            return null;
-        }
-
-        return RequestPromise(target);
-    });
-
-    // Go to each url and scrape for links, then send the link to the client
-    async function scrape(url) {
+    /** @inheritdoc */
+    async scrape(url, req, ws) {
+        const clientIp = this._getClientIp(req);
+        const movieTitle = req.query.title.toLowerCase();
+        const year = req.query.year;
         const resolvePromises = [];
+        let headers = {};
 
         try {
-            let html = '';
+            const rp = this._getRequest(req, ws);
+            const jar = rp.jar();
 
+            let html = '';
+            let searchUrl = '';
             try {
-                html = await rp({
-                    uri: `${url}/results?q=${showTitle.toLowerCase().replace(/ /g, '%20').replace(/\:/g, '')}`,
-                    timeout: 5000
-                });
-            } catch(err) {
+                searchUrl = `${url}/results?q=${movieTitle.toLowerCase().replace(/ /g, '%20').replace(/\:/g, '')}`;
+                html = await this._createRequest(rp, searchUrl, jar, headers);
+            } catch (err) {
                 try {
-                    html = await rp({
-                        uri: `${url}/results?q=${showTitle.toLowerCase().replace(/ /g, '+').replace(/\:/g, '')}`,
-                        timeout: 5000
-                    });
-                } catch(err) {
-                    html = await rp({
-                        uri: `${url}/results?q=${showTitle.toLowerCase().replace(/ /g, '%2B').replace(/\:/g, '')}`,
-                        timeout: 5000
-                    });
+                    searchUrl = `${url}/results?q=${movieTitle.toLowerCase().replace(/ /g, '+').replace(/\:/g, '')}`;
+                    html = await this._createRequest(rp, searchUrl, jar, headers);
+                } catch (err) {
+                    searchUrl = `${url}/results?q=${movieTitle.toLowerCase().replace(/ /g, '%2B').replace(/\:/g, '')}`;
+                    html = await this._createRequest(rp, searchUrl, jar, headers);
                 }
             }
 
             let $ = cheerio.load(html);
-            let videoId = '';
 
+            let videoId = '';
             $('.cell').toArray().some(element => {
-                const videoName = $(element).find('.video_title').text().trim();
-                if (videoName === showTitle) {
+                const videoName = $(element).find('.video_title').text().trim().toLowerCase();
+                const videoYearAndQuality = $(element).find('.video_quality').text().trim();
+                if ((videoName === `${movieTitle} (${year})` || videoName === movieTitle) && videoYearAndQuality.startsWith(`Year: ${year}`)) {
                     videoId = $(element).find('.video_title h3 a').attr('href').trim();
                     return true;
                 }
-
                 return false;
             });
-
-            const videoPageHtml = await rp({
-                uri: `${url}${videoId}`,
-                timeout: 5000
-            });
+            const videoPageHtml = await this._createRequest(rp, `${url}${videoId}`, jar, headers);
 
             const regexMatches = /(?:var frame_url = ")(.*)(?:")/g.exec(videoPageHtml);
 
+            // TODO: I don't think all this logic should be in the provider?
+            // It should be relatively simple and send the link and all the required resolver meta data.
             if (regexMatches) {
+                const userAgent = randomUseragent.getRandom();
+
                 let videoStreamUrl = `https:${regexMatches[1]}`;
 
                 const jar = rp.jar();
-                const videoPageHtml = await rp({
-                    uri: videoStreamUrl,
-                    jar,
-                    timeout: 5000
-                });
-
-                const userAgent = randomUseragent.getRandom();
+                const videoPageHtml = await this._createRequest(rp, videoStreamUrl, jar, headers);
 
                 const postID = /(?:var postID = ')(.*)(?:';)/.exec(videoPageHtml)[1];
-                const viewData = await rp({
-                    uri: 'https://vidlink.org/embed/update_views',
-                    method: 'POST',
-                    formData: {},
-                    headers: {
-                        accept: 'application/json, text/javascript, */*; q=0.01',
-                        'content-length': 0,
-                        'accept-language': 'en-US,en;q=0.9',
-                        // 'accept-encoding': 'gzip, deflate, br',
-                        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                        dnt: 1,
-                        origin: 'https://vidlink.org',
-                        referer: videoStreamUrl,
-                        'save-data': 'on',
-                        'user-agent': userAgent,
-                        'x-requested-with': 'XMLHttpRequest'
-                    },
-                    jar,
-                    gzip: true,
-                    json: true,
-                    timeout: 5000
-                });
+                headers = {
+                    accept: 'application/json, text/javascript, */*; q=0.01',
+                    'content-length': 0,
+                    'accept-language': 'en-US,en;q=0.9',
+                    // 'accept-encoding': 'gzip, deflate, br',
+                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    dnt: 1,
+                    origin: 'https://vidlink.org',
+                    referer: videoStreamUrl,
+                    'save-data': 'on',
+                    'user-agent': userAgent,
+                    'x-requested-with': 'XMLHttpRequest'
+                };
+                const viewData = await this._createRequest(rp, 'https://vidlink.org/embed/update_views', jar, headers,
+                    {
+                        method: 'POST',
+                        formData: {},
+                        gzip: true,
+                        json: true
+                    }
+                );
                 const id_view = viewData.id_view;
 
-                const obfuscatedSources = await rp({
-                    uri: 'https://vidlink.org/streamdrive/info',
-                    method: 'POST',
-                    headers: {
-                        accept: 'text/html, */*; q=0.01',
-                        'accept-language': 'en-US,en;q=0.9',
-                        // 'accept-encoding': 'gzip, deflate, br',
-                        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                        dnt: 1,
-                        origin: 'https://vidlink.org',
-                        referer: videoStreamUrl,
-                        'save-data': 'on',
-                        'user-agent': userAgent,
-                        'x-requested-with': 'XMLHttpRequest'
-                    },
-                    formData: {
-                        browserName: 'Opera',
-                        platform: 'Linux x86_64',
-                        postID,
-                        id_view
-                    },
-                    jar,
-                    timeout: 5000
-                });
+                headers = {
+                    accept: 'text/html, */*; q=0.01',
+                    'accept-language': 'en-US,en;q=0.9',
+                    // 'accept-encoding': 'gzip, deflate, br',
+                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    dnt: 1,
+                    origin: 'https://vidlink.org',
+                    referer: videoStreamUrl,
+                    'save-data': 'on',
+                    'user-agent': userAgent,
+                    'x-requested-with': 'XMLHttpRequest'
+                };
+                const obfuscatedSources = await this._createRequest(rp, 'https://vidlink.org/streamdrive/info', jar, headers,
+                    {
+                        method: 'POST',
+                        formData: {
+                            browserName: 'Opera',
+                            platform: 'Linux x86_64',
+                            postID,
+                            id_view
+                        }
+                    }
+                );
 
                 const cleanedObfuscatedSources = obfuscatedSources.replace('return(c35?String', `return(c<a?'':e(parseInt(c/a)))+((c=c%a)>35?String`);
 
                 // try {
-                    // const vm = require('vm');
-                    // const sandbox = {window: {checkSrc: function(){}}}; // starting variables
-                    // vm.createContext(sandbox); // Contextify the sandbox.
-                    // vm.runInContext(cleanedObfuscatedSources, sandbox);
+                // const vm = require('vm');
+                // const sandbox = {window: {checkSrc: function(){}}}; // starting variables
+                // vm.createContext(sandbox); // Contextify the sandbox.
+                // vm.runInContext(cleanedObfuscatedSources, sandbox);
 
-                    // const link = sandbox.window.srcs[0].url;
-                    // const event = createEvent(link, false, {}, {quality: '', provider: 'Vidlink', source: 'Afdah'});
-                    // sse.send(event, event.event);
+                // const link = sandbox.window.srcs[0].url;
+                // const event = createEvent(link, false, {}, {quality: '', source: 'Vidlink', provider: 'Afdah'});
+                // await ws.send(event, event.event);
                 // } catch(err) {
-                    const openloadData = await rp({
-                        uri: ' https://vidlink.org/opl/info',
+                headers = {
+                    accept: 'text/html, */*; q=0.01',
+                    'accept-language': 'en-US,en;q=0.9',
+                    // 'accept-encoding': 'gzip, deflate, br',
+                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    dnt: 1,
+                    origin: 'https://vidlink.org',
+                    referer: videoStreamUrl,
+                    'save-data': 'on',
+                    'user-agent': userAgent,
+                    'x-requested-with': 'XMLHttpRequest'
+                };
+                const openloadData = await this._createRequest(rp, 'https://vidlink.org/opl/info', jar, headers,
+                    {
                         method: 'POST',
-                        headers: {
-                            accept: 'text/html, */*; q=0.01',
-                            'accept-language': 'en-US,en;q=0.9',
-                            // 'accept-encoding': 'gzip, deflate, br',
-                            'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                            dnt: 1,
-                            origin: 'https://vidlink.org',
-                            referer: videoStreamUrl,
-                            'save-data': 'on',
-                            'user-agent': userAgent,
-                            'x-requested-with': 'XMLHttpRequest'
-                        },
                         formData: {
                             postID,
                         },
-                        jar,
-                        json: true,
-                        timeout: 5000
-                    });
+                        json: true
+                    }
+                );
 
-                    const headers = {
-                        'user-agent': userAgent,
-                    };
-                    const providerUrl = `https://oload.cloud/embed/${openloadData.id}`;
+                if (openloadData) {
+                    let providerUrl;
 
-                    resolvePromises.push(resolve(sse, providerUrl, 'Afdah', jar, headers));
-                // }
-            }
-        } catch (err) {
-            if (!sse.stopExecution) {
-                logger.error({source: 'Afdah', sourceUrl: url, query: {title: req.query.title}, error: (err.message || err.toString()).substring(0, 100) + '...'});
+                    if (openloadData.id) {
+                        providerUrl = `https://oload.cloud/embed/${openloadData.id}`;
+                    } else {
+                        let jwPlayerConfig;
+                        let jQuery = this._getJqueryShim($);
+                        const sandbox = this._getDefaultSandbox(jQuery, this._getJwPlayerShim((config) => {
+                            jwPlayerConfig = config;
+                        }));
+                        sandbox['config'] = {};
+                        let dynamicVariable = this._createNativeProxyShim('ser1', true);
+                        sandbox['ser1'] = sandbox['ser2'] = sandbox['showSer1'] = sandbox['showSer2'] = dynamicVariable;
+
+                        vm.createContext(sandbox); // Contextify the sandbox.
+                        vm.runInContext(openloadData, sandbox);
+
+                        if (jwPlayerConfig.file) {
+                            providerUrl = this._absoluteUrl(videoStreamUrl, jwPlayerConfig.file);
+                        }
+                    }
+
+                    if (providerUrl) {
+                        resolvePromises.push(this.resolveLink(providerUrl, ws, jar, headers));
+                    }
+                }
             }
         }
-
-        return Promise.all(resolvePromises);
+    catch(err) {
+        this._onErrorOccurred(err)
     }
-
-    // Asynchronously start all the scrapers for each url
-    urls.forEach((url) => {
-        promises.push(scrape(url));
-    });
-
-    return Promise.all(promises);
-}
-
-module.exports = exports = Afdah;
+        return Promise.all(resolvePromises)
+    }
+};

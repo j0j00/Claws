@@ -3,49 +3,38 @@ const RequestPromise = require('request-promise');
 const cheerio = require('cheerio');
 const randomUseragent = require('random-useragent');
 const URL = require('url');
-const logger = require('../../../utils/logger');
+const { absoluteUrl, removeYearFromTitle } = require('../../../utils');
+const BaseProvider = require('../BaseProvider');
 
-const resolve = require('../../resolvers/resolve');
+module.exports = class SwatchSeries extends BaseProvider {
+    /** @inheritdoc */
+    getUrls() {
+        return ["https://www1.swatchseries.to"];
+    }
 
-async function SwatchSeries(req, sse) {
-    const clientIp = req.client.remoteAddress.replace('::ffff:', '').replace('::1', '')
-    const showTitle = req.query.title;
-    const {season, episode} = req.query;
-
-    const urls = ["https://www1.swatchseries.to"];
-    const promises = [];
-
-    const rp = RequestPromise.defaults(target => {
-        if (sse.stopExecution) {
-            return null;
-        }
-
-        return RequestPromise(target);
-    });
-
-    // Go to each url and scrape for links, then send the link to the client
-    async function scrape(url) {
+    /** @inheritdoc */
+    async scrape(url, req, ws) {
+        const showTitle = req.query.title;
+        const year = req.query.year;
+        const season = req.query.season
+        const episode = req.query.episode;
+        const searchTitle = showTitle.replace(/\s+/g, '%20').toLowerCase();
+        const searchUrl = `${url}/search/${searchTitle}`;
+        const rp = this._getRequest(req, ws);
+        const jar = rp.jar();
         const resolvePromises = [];
+        const clientIp = this._getClientIp(req);
 
         try {
-            const jar = rp.jar();
             const userAgent = randomUseragent.getRandom();
-            const html = await rp({
-                uri: `${url}/search/${showTitle.replace(/ \(.*\)/, '').replace(/ /, '%20')}`,
-                headers: {
-                    'user-agent': userAgent,
-                    referer: url
-                },
-                jar,
-                timeout: 5000
+            const response = await this._createRequest(rp, searchUrl, jar, {
+                'user-agent': userAgent,
+                referer: url
             });
-
-            let $ = cheerio.load(html);
-
+            let $ = cheerio.load(response);
             let showUrl = '';
-
             $(`a strong`).toArray().some(element => {
-                if ($(element).text() === showTitle) {
+                if ($(element).text() === `${showTitle} (${year})` || $(element).text() === `${showTitle} (${year}) (${year})` || $(element).text() === showTitle) {
                     showUrl = $(element).parent().attr('href');
                     return true;
                 }
@@ -54,58 +43,49 @@ async function SwatchSeries(req, sse) {
 
             if (!showUrl) {
                 // Don't attempt to make requests on empty URLs.
+                this.logger.debug(`${this.getProviderId()} - no urls found for ${showTitle}`)
                 return Promise.all(resolvePromises);
             }
-
-            const videoPageHtml = await rp({
-                uri: showUrl,
-                headers: {
-                    'user-agent': userAgent
-                },
-                jar,
-                timeout: 5000
-            });
+            const videoPageHtml = await this._createRequest(rp, showUrl);
 
             $ = cheerio.load(videoPageHtml);
 
-            const episodeUrl = $(`a[href*="s${season}_e${episode}"]`).attr('href');
 
-            const episodePageHtml = await rp({
-                uri: episodeUrl,
-                headers: {
-                    'user-agent': userAgent
-                },
-                jar,
-                timeout: 5000
+            // const episodeUrl = $(`a[href*="s${season}_e${episode}.html"]`).attr('href');
+            let episodeUrl = '';
+            $(`div[itemtype="http://schema.org/TVSeason"]`).toArray().some(seasonDiv => {
+                const seasonSpan = $(seasonDiv).find('a[itemprop="url"] > span[itemprop="name"]');
+                if (seasonSpan.length && seasonSpan.text() === `Season ${season}`) {
+                    const episodeListItem = $(seasonDiv).find(`li[itemtype="http://schema.org/TVEpisode"]:has(meta[itemprop="episodenumber"][content="${episode}"])`);
+                    episodeUrl = episodeListItem.find('a').attr('href');
+                    return true;
+                }
+
+                return false;
+            });
+
+            if (!episodeUrl) {
+                return Promise.resolve();
+            }
+
+            const episodePageHtml = await this._createRequest(rp, episodeUrl, jar, {
+                'user-agent': userAgent
             });
 
             $ = cheerio.load(episodePageHtml);
-
             const videoUrls = $('.watchlink').toArray().map(element => URL.parse($(element).attr('href') || '', true).query.r).filter(url => !!url).map(url => Buffer.from(url, 'base64').toString());
 
-            videoUrls.forEach(async (providerUrl) => {
+            videoUrls.forEach((link) => {
                 const headers = {
                     'user-agent': userAgent,
                     'x-real-ip': clientIp,
                     'x-forwarded-for': clientIp
                 };
-                resolvePromises.push(resolve(sse, providerUrl, 'SwatchSeries', jar, headers));
+                resolvePromises.push(this.resolveLink(link, ws, jar, headers));
             });
         } catch (err) {
-            if (!sse.stopExecution) {
-                logger.error({source: 'SwatchSeries', sourceUrl: url, query: {title: req.query.title, season: req.query.season, episode: req.query.episode}, error: (err.message || err.toString()).substring(0, 100) + '...'});
-            }
+            this._onErrorOccurred(err);
         }
-
         return Promise.all(resolvePromises);
     }
-
-    // Asynchronously start all the scrapers for each url
-    urls.forEach((url) => {
-        promises.push(scrape(url));
-    });
-
-    return Promise.all(promises);
 }
-
-module.exports = exports = SwatchSeries;

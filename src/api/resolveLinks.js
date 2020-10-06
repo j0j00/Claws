@@ -1,14 +1,17 @@
 'use strict';
 
 // Load providers
-const providers = require('../scrapers/providers');
+const { providers } = require('../scrapers/providers');
+const { queue } = require('../utils/queue');
+const RequestPromise = require('request-promise');
 
-const BaseProvider = require('../scrapers/providers/BaseProvider');
+const logger = require('../utils/logger');
+const WsWrapper = require('../utils/WsWrapper');
 
 /**
  * Sends the current time in milliseconds.
  */
-const sendInitialStatus = (sse) => sse.send({ data: [`${new Date().getTime()}`], event: 'status'}, 'result');
+const sendInitialStatus = (ws) => ws.send(JSON.stringify({ data: [`${new Date().getTime()}`], event: 'status' }));
 
 /**
  * Return request handler for certain media types.
@@ -19,49 +22,35 @@ const sendInitialStatus = (sse) => sse.send({ data: [`${new Date().getTime()}`],
  */
 const resolveLinks = async (data, ws, req) => {
     const type = data.type;
-    const sse = {
-        send: (data) => {
-            try {
-                ws.send(JSON.stringify(data));
-            } catch (err) {
-                console.log("WS client disconnected, can't send data");
-            }
-        },
-        stopExecution: false
-    };
 
-    sendInitialStatus(sse);
+    sendInitialStatus(ws);
+
+    const wsWrapper = new WsWrapper(ws, data.options);
 
     ws.on('close', () => {
-        sse.stopExecution = true;
+        wsWrapper.stopExecution = true;
     });
 
     const promises = [];
 
-    req.query = {...data, type};
+    req.query = data;
 
     // Get available providers.
-    let availableProviders;
-    if (type === 'anime') {
-        // The universal provider won't work with animes.
-        availableProviders = [...providers[type]]
-    } else {
-        availableProviders = [...providers[type], ...providers.universal];
+    let availableProviders = [...providers[type], ...providers.universal];
+
+    availableProviders.forEach((provider) => promises.push(provider.resolveRequests(req, wsWrapper)));
+
+    if (queue.isEnabled) {
+        queue.process()
     }
 
-    availableProviders.forEach((provider) => {
-        if (provider instanceof BaseProvider) {
-            // Use object orientated provider.
-            return promises.push(provider.resolveRequests(req, sse));
-        } else {
-            // Use declarative provider.
-            return promises.push(provider(req, sse));
-        }
-    });
-
     await Promise.all(promises);
-
-    sse.send({event: 'done'}, 'done');
+    if (ws.isAlive) {
+        logger.debug('Scraping complete: sending `Done` event');
+        ws.send(JSON.stringify({ event: 'done' }));
+    } else {
+        logger.debug('Scraping complete: `Done` event ready, but websocket is dead.');
+    }
 };
 
 module.exports = resolveLinks;

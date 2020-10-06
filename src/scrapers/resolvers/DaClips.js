@@ -17,7 +17,7 @@ async function DaClips(uri, jar, {'user-agent': userAgent}) {
 
     if (!$('script:contains("sources")').length) {
         const videoPageHtml = await rp({
-            uri: uri.replace('http:', 'https:'),
+            uri: uri.replace('http:', 'https:').replace('.com', '.in'),
             method: 'POST',
             headers: {
                 'user-agent': userAgent

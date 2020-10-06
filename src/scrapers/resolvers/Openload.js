@@ -53,6 +53,7 @@ function OpenloadHtml(providerPageHtml) {
                     }
                 }
             },
+            cc_cc_cc: null,
             window: {
                 $: jQuery,
                 jQuery

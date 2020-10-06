@@ -1,25 +1,32 @@
 'use strict';
+const { queue } = require('../../utils/queue');
 
-module.exports = exports = {
+module.exports.providers = {
     movies: [
-        require('./movies/Afdah'),
-        require('./movies/AZMovies'),
-        require('./movies/bfmovies'),
-        require('./movies/StreamM4u'),
-        require('./movies/MovieFiles'),
+        new (require('./movies/Afdah'))(queue),
+        new (require('./movies/AZMovies'))(queue),
+        new (require('./movies/bfmovies'))(queue),
+        new (require('./movies/StreamM4u'))(queue),
+        //require('./movies/MovieFiles'),
+        new (require('./movies/DLFilm'))(queue)
     ],
     tv: [
-        require('./tv/GoWatchSeries'),
-        require('./tv/SeriesFree'),
-        require('./tv/AfdahTV'),
-        require('./tv/Series8'),
-        require('./tv/SwatchSeries'),
+        new (require('./tv/SeriesFree'))(queue),
+        new (require('./tv/GoWatchSeries'))(queue),
+        new (require('./tv/SwatchSeries'))(queue),
+        new (require('./tv/ProjectFreeTV'))(queue)
+        //require('./tv/AfdahTV'),
     ],
     anime: [
-        new (require('./anime/MasterAnime'))(),
+        new (require('./anime/AnimePahe'))(),
     ],
     universal: [
-        require('./universal/123movie'),
+        new (require('./universal/123movie'))(queue),
+        new (require('./universal/ODB'))(queue),
+        new (require('./universal/Series8'))(queue),
         //require('./universal/5movies')
+        new (require('./universal/FardaDownload'))(queue)
     ]
 };
+
+module.exports.queue = queue;

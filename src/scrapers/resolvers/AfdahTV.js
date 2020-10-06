@@ -38,7 +38,7 @@ async function AfdahTV(uri, jar, headers) {
     const providerUrl = /(?:src=')(.*)(?:' scrolling)/g.exec(decode)[1];
 
     const videoSourceUrl = await Openload(providerUrl, jar);
-    sse.send({videoSourceUrl, url, provider: 'https://openload.co', ipLocked: true}, 'result');
+    await ws.send({videoSourceUrl, url, provider: 'https://openload.co', ipLocked: true}, 'result');
 }
 
 module.exports = exports = AfdahTV;

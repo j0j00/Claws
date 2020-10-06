@@ -12,10 +12,15 @@ const pathToApp = __dirname;
 // Initialize express
 let app = express();
 
-// Add renderer.
-app.engine('html', require('ejs').__express);
-app.set('views', 'public'); // render from the public directory.
-app.set('view engine', 'html');
+let redirectToLive = process.env.NODE_ENV === 'production' && process.env.SHOW_DEV_UI !== 'true';
+
+if (!redirectToLive) {
+    // Only apply the templating engine renderer if we're using it.
+
+    app.engine('html', require('ejs').__express);
+    app.set('views', 'public'); // render from the public directory.
+    app.set('view engine', 'html');
+}
 
 // Load external ExpressJS middleware
 const compression = require('compression');
@@ -44,12 +49,12 @@ app.use(function (req, res, next) {
 
 /** RENDERED ROUTES **/
 app.get('/', function(req, res) {
-    if (process.env.NODE_ENV === 'production') {
+    if (redirectToLive) {
         // When in production, redirect to the main site.
         res.redirect("https://apollotv.xyz/");
     } else {
         // Otherwise, render the index file with the secret client id set.
-        res.render('index', {secret_client_id: process.env.SECRET_CLIENT_ID});
+        res.render('index', {secret_client_id: process.env.SECRET_CLIENT_ID, tmdb_api_key: process.env.TMDB_API_KEY});
     }
 });
 app.get('/salsa20.min.js', (req, res) => res.sendFile(`${pathToApp}/public/salsa20.min.js`));

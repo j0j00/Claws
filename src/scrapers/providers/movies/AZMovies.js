@@ -1,36 +1,26 @@
-const Promise = require('bluebird');
-const RequestPromise = require('request-promise');
 const cheerio = require('cheerio');
-const tough = require('tough-cookie');
 const randomUseragent = require('random-useragent');
-const logger = require('../../../utils/logger');
+const BaseProvider = require('../BaseProvider');
+const tough = require('tough-cookie');
 
-const resolve = require('../../resolvers/resolve');
+module.exports = class AZMovies extends BaseProvider {
+    /** @inheritdoc */
+    getUrls() {
+        return ["https://azmovie.to"];
+    }
 
-async function AZMovies(req, sse) {
-    const clientIp = req.client.remoteAddress.replace('::ffff:', '').replace('::1', '');
-    const movieTitle = req.query.title;
-
-    // These are all the same host I think. https://xmovies8.org isn't loading.
-    const urls = ["https://azmovies.xyz"];
-    const promises = [];
-
-    const rp = RequestPromise.defaults(target => {
-        if (sse.stopExecution) {
-            return null;
-        }
-
-        return RequestPromise(target);
-    });
-
-    // Go to each url and scrape for links, then send the link to the client
-    async function scrape(url) {
+    /** @inheritdoc */
+    async scrape(url, req, ws) {
+        const clientIp = this._getClientIp(req);
+        const movieTitle = req.query.title;
+        const year = req.query.year;
         const resolvePromises = [];
 
         try {
+            const rp = this._getRequest(req, ws);
             const jar = rp.jar();
-            const movieUrl = `${url}/watch.php?title=${movieTitle.replace(/ /g, '+')}`;
-            const referer = `https://azmovies.xyz/`;
+            const searchMovieUrl = `${url}/livesearch.php`;
+            const referer = `https://azmovie.to/`;
             const userAgent = randomUseragent.getRandom();
             const headers = {
                 referer,
@@ -39,54 +29,57 @@ async function AZMovies(req, sse) {
                 'x-forwarded-for': clientIp
             };
 
-            let html = await rp({
-                uri: movieUrl,
-                headers,
-                jar,
+            let searchResults = await this._createRequest(rp, searchMovieUrl, jar, headers, {
+                method: 'POST',
+                formData: {
+                    searchVal: movieTitle,
+                },
                 followAllRedirects: true,
-                timeout: 5000
+            })
+
+            let $ = cheerio.load(searchResults);
+
+            let movieUrl = '';
+            $('a').toArray().some(searchResultElement => {
+                for (let childNode of searchResultElement.childNodes) {
+                    if (childNode.data === `${movieTitle} (${year})` || childNode.data === movieTitle) {
+                        movieUrl = `${url}/${$(searchResultElement).attr('href')}`;
+                        return true;
+                    }
+                }
+
+                return false;
             });
+            if (!movieUrl) {
+                return Promise.resolve();
+            }
+
+            let html = await this._createRequest(rp, movieUrl, jar, headers)
 
             let documentCookie = /document\.cookie\s*=\s*"(.*)=(.*)";/g.exec(html);
             while (documentCookie) {
+                // TODO this needs work, response variable is undefined.
                 const cookie = new tough.Cookie({
                     key: documentCookie[1],
                     value: documentCookie[2]
                 });
                 jar.setCookie(cookie, url);
-                html = html.replace('document.cookie', '');
-                documentCookie = /document\.cookie\s*=\s*"(.*)=(.*)";/g.exec(html);
+                response = response.replace('document.cookie', '');
+                documentCookie = /document\.cookie\s*=\s*"(.*)=(.*)";/g.exec(response);
             }
 
-            const videoPageHtml = await rp({
-                uri: movieUrl,
-                headers,
-                jar,
-                timeout: 5000
-            });
+            const videoPageHtml = await this._createRequest(rp, movieUrl, jar, headers);
 
-            let $ = cheerio.load(videoPageHtml);
+            $ = cheerio.load(videoPageHtml);
 
             $('#serverul li a').toArray().forEach((element) => {
-                const providerUrl = $(element).attr('href');
-                resolvePromises.push(resolve(sse, providerUrl, 'AZMovies', jar, headers));
+                const providerUrl = this._absoluteUrl(movieUrl, $(element).attr('href'));
+                resolvePromises.push(this.resolveLink(providerUrl, ws, jar, headers));
             });
-
-        } catch (err) {
-            if (!sse.stopExecution) {
-                logger.error({source: 'AZMovies', sourceUrl: url, query: {title: req.query.title}, error: (err.message || err.toString()).substring(0, 100) + '...'});
-            }
         }
-
-        return Promise.all(resolvePromises);
+        catch (err) {
+            this._onErrorOccurred(err)
+        }
+        return Promise.all(resolvePromises)
     }
-
-    // Asynchronously start all the scrapers for each url
-    urls.forEach((url) => {
-        promises.push(scrape(url));
-    });
-
-    return Promise.all(promises);
 }
-
-module.exports = exports = AZMovies;

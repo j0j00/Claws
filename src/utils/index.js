@@ -89,5 +89,13 @@ module.exports = {
      */
     timeout: (ms) => {
         return new Promise(resolve => setTimeout(resolve, ms));
+    },
+
+    /**
+     * removes year from string ie: title (2019) -> title
+     * @param title title including year to be removed.
+     */
+    removeYearFromTitle: (title) => {
+        return title.replace(/\s\([0-9]{4}\)$/, "");
     }
 };
